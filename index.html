@@ -67,6 +67,16 @@ button { font-family: inherit; }
 .stamp-msg { color: #fff; font-size: 6rem; text-shadow: 0 .5rem 0 var(--ink); } .stamp-sub { color: #fff; font-size: 3.2rem; text-shadow: 0 .3rem 0 var(--ink); }
 @keyframes stampIn { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(.92) rotate(-8deg); opacity: 1; } 100% { transform: scale(1) rotate(-8deg); } }
 
+.sync-pop { position: absolute; inset: 0; z-index: 11; background: rgba(43,45,66,.6); display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+.sync-card { background: #fffdf2; border: .6rem solid var(--ink); border-radius: 3rem; padding: 2rem 2.4rem; width: min(96rem, 100%); max-height: 100%; overflow-y: auto; box-shadow: 0 1rem 0 var(--ink); }
+.sync-head { display: flex; justify-content: space-between; align-items: center; font-size: 3.6rem; margin-bottom: 1.2rem; }
+.sync-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2.4rem; }
+.sync-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.sync-t { font-size: 2.8rem; }
+.sync-pop textarea { width: 100%; font: inherit; font-weight: 700; font-size: max(16px, 2.2rem); line-height: 1.3; border: .4rem solid var(--ink); border-radius: 1.6rem; padding: 1rem 1.2rem; background: #fff; color: var(--ink); resize: none; user-select: text; -webkit-user-select: text; word-break: break-all; }
+.sync-h { font-size: 2.1rem; color: #5b6075; margin-top: .8rem; line-height: 1.35; }
+.sync-msg { font-size: 2.4rem; line-height: 1.35; min-height: 3rem; } .sync-msg.ok { color: #0b7a39; } .sync-msg.bad { color: #c22; }
+
 /* ---------- 지역 ---------- */
 #regions { background: linear-gradient(#bfe9ff, #eaffd9); }
 .region-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2.2rem; padding: 1rem 3rem 3.6rem; align-items: stretch; }
@@ -174,10 +184,11 @@ button { font-family: inherit; }
 /* ---------- 세로 화면(폰·태블릿 세로): 폭 약 55rem 기준으로 다시 배치 ---------- */
 @media (orientation: portrait) {
   html { font-size: min(1.8vw, 1.05vh); }
+  .sync-cols { grid-template-columns: 1fr; } .sync-card { padding: 1.6rem; }
   .topbar { flex-wrap: wrap; justify-content: center; padding: 1.6rem 2rem .8rem; gap: 1rem; }
   .topbar h2 { font-size: 4rem; order: -1; width: 100%; text-align: center; }
-  #title { flex-direction: column; gap: 3rem; justify-content: center; padding: 3rem 2rem; overflow: hidden; }
-  .logo { font-size: 9rem; } .logo .l2 { font-size: 6.6rem; } .title-mon { height: 16rem; }
+  #title { flex-direction: column; gap: 2rem; justify-content: center; padding: 3rem 2rem; overflow: hidden; }
+  .logo { font-size: 8rem; } .logo .l2 { font-size: 5.8rem; } .title-mon { height: 11rem; } .title-left { gap: 1.2rem; }
   .stampcard { width: min(50rem, 94vw); } .d3 { bottom: 3%; }
   .region-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); padding: 1rem 2.4rem 3rem; }
   .rcard .re { font-size: 12rem; } .rcard .rn { font-size: 7rem; } .rcard .rd, .rcard .rp { font-size: 2.3rem; }
@@ -214,12 +225,33 @@ button { font-family: inherit; }
         <button class="btn" id="btnTitleDex">📖 도감</button>
         <button class="btn snd" data-snd>🔊 소리</button>
       </div>
+      <button class="btn small" id="btnSync">🔄 기록 옮기기</button>
     </div>
     <div class="title-right">
       <div class="stampcard">
         <div class="sc-head"><button class="sc-nav" id="scPrev" aria-label="이전 카드">◀</button><div id="scTitle">출석 도장</div><button class="sc-nav" id="scNext" aria-label="다음 카드">▶</button></div>
         <div class="sc-grid" id="scGrid"></div>
         <div class="sc-foot" id="scFoot"></div>
+      </div>
+    </div>
+    <div id="syncPop" class="sync-pop hidden">
+      <div class="sync-card">
+        <div class="sync-head"><b>기록 옮기기</b><button class="btn small" id="syncClose">닫기 ✕</button></div>
+        <div class="sync-cols">
+          <div class="sync-col">
+            <div class="sync-t">① 이 기기의 기록 내보내기</div>
+            <textarea id="syncOut" readonly rows="3"></textarea>
+            <div class="row"><button class="btn small primary" id="syncCopy">📋 코드 복사</button><button class="btn small" id="syncShare">📤 공유</button></div>
+            <div class="sync-h">복사한 코드를 카톡 '나에게 보내기'로 다른 기기에 보내요.</div>
+          </div>
+          <div class="sync-col">
+            <div class="sync-t">② 다른 기기의 코드 가져오기</div>
+            <textarea id="syncIn" rows="3" placeholder="PQ1- 로 시작하는 코드를 여기에 붙여 넣어요"></textarea>
+            <div class="row"><button class="btn small primary" id="syncGo">➕ 합치기</button></div>
+            <div class="sync-msg" id="syncMsg"></div>
+          </div>
+        </div>
+        <div class="sync-h">합쳐도 지금 기록은 지워지지 않아요. 양쪽 기록이 모두 남아요.</div>
       </div>
     </div>
     <div id="stampPop" class="stamp-pop hidden"><div class="stamp-big">★</div><div class="stamp-msg">오늘의 출석 도장!</div><div class="stamp-sub" id="stampSub"></div><button class="btn primary" id="stampOk">좋아요!</button></div>
@@ -917,6 +949,19 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     } catch (e) {}
   }
   function save() { try { root.localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }
+  var EPOCH = Date.UTC(2020, 0, 1);
+  function dayNum(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m ? Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - EPOCH) / 86400000) : 0; }
+  function dayStr(n) { if (!(n > 0 && n < 36500)) return ''; var d = new Date(EPOCH + n * 86400000); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+  function hash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36).slice(-5); }
+  function wrap(json) { var b = root.btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); return 'PQ1-' + b + '-' + hash(b); }
+  function unwrap(text) {
+    var t = String(text || '').replace(/\s+/g, ''), i = t.indexOf('PQ1-');
+    if (i < 0) return { ok: false, error: '저장 코드가 아니에요. PQ1- 로 시작하는 코드를 붙여 넣어 주세요.' };
+    t = t.slice(i); var m = /^PQ1-([A-Za-z0-9_-]+)-([a-z0-9]+)/.exec(t);
+    if (!m || hash(m[1]) !== m[2]) return { ok: false, error: '코드가 잘렸거나 글자가 달라요. 처음부터 끝까지 전부 복사했는지 확인해 주세요.' };
+    try { var b = m[1].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; var o = JSON.parse(root.atob(b)); if (!o || typeof o !== 'object') throw 0; return { ok: true, obj: o }; }
+    catch (e) { return { ok: false, error: '코드를 읽을 수 없어요. 다시 복사해 주세요.' }; }
+  }
   load();
   root.Store = {
     data: data,
@@ -934,6 +979,28 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
       var t = today();
       if (data.stamps.indexOf(t) >= 0) return false;
       data.stamps.push(t); save(); return true;
+    },
+    // ---- 기기 간 옮기기: 저장 코드 만들기 / 합치기 ----
+    // 코드 = PQ1-<base64url(JSON)>-<검사값>. 잡은 포켓몬(번호 목록)과 도장(날짜)만 담음.
+    exportCode: function () {
+      var ids = Object.keys(data.caught).map(Number).filter(function (n) { return n > 0; }).sort(function (a, b) { return a - b; });
+      var days = data.stamps.map(dayNum).filter(function (n) { return n > 0; });
+      return wrap(JSON.stringify({ c: ids, s: days }));
+    },
+    // 반환: { ok, error, newCaught, newStamps }. 내 기록은 지우지 않고 합침(합집합).
+    importCode: function (text) {
+      var r = unwrap(text); if (!r.ok) return r;
+      var o = r.obj, nc = 0, ns = 0, valid = root.POKEMON ? {} : null;
+      if (valid) root.POKEMON.forEach(function (p) { valid[p.id] = 1; });
+      (Array.isArray(o.c) ? o.c : []).forEach(function (id) {
+        id = +id; if (!(id > 0) || (valid && !valid[id]) || data.caught[id]) return;
+        data.caught[id] = { n: 1, d: today() }; nc++;
+      });
+      (Array.isArray(o.s) ? o.s : []).forEach(function (n) {
+        var d = dayStr(+n); if (!d || data.stamps.indexOf(d) >= 0) return; data.stamps.push(d); ns++;
+      });
+      data.stamps.sort(); save();
+      return { ok: true, newCaught: nc, newStamps: ns, totalCaught: Object.keys(data.caught).length, totalStamps: data.stamps.length };
     },
     setSound: function (on) { data.sound = !!on; save(); },
     reset: function () { data.caught = {}; data.stamps = []; save(); }
@@ -1626,14 +1693,34 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     $('#fHome').addEventListener('click', function () { root.Sfx.click(); show('regions'); });
     $('#fDex').addEventListener('click', function () { root.Sfx.click(); show('dex'); });
     $('#dexBack').addEventListener('click', function () { root.Sfx.click(); var back = prevScreen === 'field' && region ? 'field' : (prevScreen === 'regions' ? 'regions' : 'title'); show(back); if (back === 'field') root.Field.resume(); });
+    // 기록 옮기기
+    function syncMsg(t, ok) { var m = $('#syncMsg'); m.textContent = t; m.className = 'sync-msg ' + (ok ? 'ok' : 'bad'); }
+    $('#btnSync').addEventListener('click', function () { root.Sfx.click(); $('#syncOut').value = root.Store.exportCode(); $('#syncIn').value = ''; syncMsg('', true); $('#syncShare').style.display = navigator.share ? '' : 'none'; $('#syncPop').classList.remove('hidden'); });
+    $('#syncClose').addEventListener('click', function () { root.Sfx.click(); $('#syncPop').classList.add('hidden'); });
+    $('#syncOut').addEventListener('focus', function () { this.select(); });
+    $('#syncCopy').addEventListener('click', function () {
+      var ta = $('#syncOut'), done = function () { root.Sfx.correct(); $('#syncCopy').textContent = '✔ 복사됐어요'; setTimeout(function () { $('#syncCopy').textContent = '📋 코드 복사'; }, 1800); };
+      ta.focus(); ta.select(); try { ta.setSelectionRange(0, ta.value.length); } catch (e) {}
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(done, function () { try { document.execCommand('copy') && done(); } catch (e) {} });
+      else { try { document.execCommand('copy') && done(); } catch (e) {} }
+    });
+    $('#syncShare').addEventListener('click', function () { try { navigator.share({ title: '포켓몬 퀴즈 기록', text: $('#syncOut').value }); } catch (e) {} });
+    $('#syncGo').addEventListener('click', function () {
+      var r = root.Store.importCode($('#syncIn').value);
+      if (!r.ok) { root.Sfx.wrong(); syncMsg(r.error, false); return; }
+      root.Sfx.caught(); renderStamps(true); $('#syncOut').value = root.Store.exportCode();
+      syncMsg('합쳤어요! 새 포켓몬 ' + r.newCaught + '마리, 새 도장 ' + r.newStamps + '개 · 지금 도감 ' + r.totalCaught + ' / ' + root.POKEMON.length + ', 도장 ' + r.totalStamps + '개', true); $('#syncIn').value = '';
+    });
     $('#scPrev').addEventListener('click', function () { stampPage--; renderStamps(); root.Sfx.click(); });
     $('#scNext').addEventListener('click', function () { stampPage++; renderStamps(); root.Sfx.click(); });
     $('#stampOk').addEventListener('click', function () { root.Sfx.click(); $('#stampPop').classList.add('hidden'); });
     // 소리는 첫 터치·키 입력 뒤에만 켜진다 (브라우저 규칙)
     ['pointerdown', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function () { root.Sfx.unlock(); }, { once: true, capture: true }); });
     window.addEventListener('keydown', function (e) {
+      if (e.target && e.target.tagName === 'TEXTAREA') { if (e.key === 'Escape') $('#syncClose').click(); return; }
       if (current === 'battle') { if (root.Battle.key(e)) e.preventDefault(); return; }
       if (e.key === 'Enter' || e.key === ' ') { if (!$('#stampPop').classList.contains('hidden')) { $('#stampOk').click(); e.preventDefault(); } else if (current === 'title' && document.activeElement === document.body) { $('#btnStart').click(); e.preventDefault(); } }
+      if (e.key === 'Escape' && !$('#syncPop').classList.contains('hidden')) { $('#syncClose').click(); return; }
       if (e.key === 'Escape') { if (current === 'dex') $('#dexBack').click(); else if (current === 'field') $('#fHome').click(); else if (current === 'regions') show('title'); }
     });
     document.addEventListener('contextmenu', function (e) { if (e.target.closest('#field')) e.preventDefault(); });
