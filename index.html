@@ -207,6 +207,18 @@ button { font-family: inherit; }
   .dex-grid { grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); padding: 1rem 2rem 3rem; gap: 1.2rem; } .dcell img { width: 11rem; height: 11rem; }
 }
 
+/* 읽어 주기: 지금 읽는 보기 표시 + 다시 듣기 버튼 */
+.choice.reading { background: #fff3b0 !important; box-shadow: 0 0 0 .5rem #ffb400; transform: scale(1.03); }
+.speak-btn { position: absolute; top: .9rem; right: 1.2rem; font: inherit; font-size: 1.8rem; font-weight: 700; padding: .3rem 1.1rem; border-radius: 2rem; border: .35rem solid var(--ink); background: #ffe27a; color: var(--ink); cursor: pointer; box-shadow: 0 .4rem 0 rgba(43,45,66,.85); }
+.speak-btn:active { transform: translateY(.3rem); box-shadow: none; }
+.bubble { padding-top: 4.6rem; }
+
+/* 도감 「그림 모두 보기」: 작은 칸에 색칠된 그림을 빽빽하게, 눌러서 이름 듣기 */
+.dcell.tap { cursor: pointer; } .dcell.tap:active { transform: translateY(.3rem); }
+.dex-grid.art { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1.1rem; }
+.dex-grid.art .dcell img { width: 11rem; height: 11rem; } .dex-grid.art .dname { font-size: 2.2rem; } .dex-grid.art .dtypes { display: none; }
+.dcell.mine { position: relative; } .dcell.mine::after { content: "✔"; position: absolute; top: .3rem; right: .8rem; font-size: 2.4rem; color: #1ca04a; font-weight: 900; }
+
 </style>
 </head>
 <body>
@@ -288,6 +300,7 @@ button { font-family: inherit; }
         <div id="bBubble" class="bubble">
           <div id="bQ" class="b-q"></div>
           <div id="bBig" class="b-big"></div>
+          <button class="speak-btn" id="bSpeak" aria-label="다시 듣기">🔊 다시 듣기</button>
         </div>
         <div id="bChoices" class="choices"></div>
       </div>
@@ -301,7 +314,7 @@ button { font-family: inherit; }
     <div class="topbar">
       <button class="btn small" id="dexBack">← 돌아가기</button>
       <h2>도감 <span id="dexCount"></span></h2>
-      <div class="seg"><button class="btn small on" data-filter="all">전체</button><button class="btn small" data-filter="caught">잡은 포켓몬</button></div>
+      <div class="seg"><button class="btn small on" data-filter="all">전체</button><button class="btn small" data-filter="caught">잡은 포켓몬</button><button class="btn small" data-filter="art">🖼 그림 모두 보기</button></div>
     </div>
     <div class="dex-grid" id="dexGrid"></div>
   </section>
@@ -1018,10 +1031,43 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     if (ctx) return ctx;
     var AC = root.AudioContext || root.webkitAudioContext;
     if (!AC) return null;
-    try { ctx = new AC(); master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination); } catch (e) { ctx = null; }
+    try {
+      ctx = new AC(); master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
+      // 아이패드 등에서 소리가 끊기거나(interrupted) 멈추면 다음 터치 때 다시 깨운다
+      ctx.onstatechange = function () { ready = false; };
+    } catch (e) { ctx = null; }
     return ctx;
   }
-  Sfx.unlock = function () { var c = ensure(); if (c && c.state === 'suspended') c.resume(); };
+  // 아이폰·아이패드: 무음 스위치가 켜져 있으면 WebAudio 소리가 안 난다.
+  // 소리 없는 <audio> 를 계속 재생해 두면 '미디어 재생' 모드가 되어 무음 스위치와 상관없이 나온다.
+  var ready = false, silentEl = null;
+  function silentWavUrl() {
+    var n = 800, buf = new Uint8Array(44 + n), dv = new DataView(buf.buffer);
+    function str(o, t) { for (var i = 0; i < t.length; i++) buf[o + i] = t.charCodeAt(i); }
+    str(0, 'RIFF'); dv.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+    dv.setUint16(22, 1, true); dv.setUint32(24, 8000, true); dv.setUint32(28, 8000, true); dv.setUint16(32, 1, true); dv.setUint16(34, 8, true);
+    str(36, 'data'); dv.setUint32(40, n, true); for (var i = 0; i < n; i++) buf[44 + i] = 128;
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+  function startSilentTag() {
+    try {
+      if (!silentEl) { silentEl = document.createElement('audio'); silentEl.src = silentWavUrl(); silentEl.loop = true; silentEl.setAttribute('playsinline', ''); silentEl.preload = 'auto'; silentEl.volume = 0.01; }
+      var p = silentEl.play(); if (p && p.catch) p.catch(function () { ready = false; });
+    } catch (e) {}
+  }
+  // 첫 터치·키 입력 때(그리고 소리가 막힌 상태면 매번) 호출 — 브라우저가 '사용자가 눌렀을 때만' 소리를 허용하기 때문
+  Sfx.unlock = function () {
+    var c = ensure();
+    if (ready && c && c.state === 'running') return;
+    if (c) {
+      if (c.state !== 'running' && c.resume) { try { var r = c.resume(); if (r && r.catch) r.catch(function () {}); } catch (e) {} }
+      try { var b = c.createBuffer(1, 1, 22050), s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); } catch (e) {}
+    }
+    startSilentTag();
+    if (root.Voice && root.Voice.unlock) root.Voice.unlock();
+    ready = !!(c && c.state === 'running');
+  };
+  Sfx.isReady = function () { return !!(ctx && ctx.state === 'running'); };
   // 음 하나: 주파수, 시작(초 뒤), 길이, 파형, 음량, 끝 주파수(미끄러짐)
   function tone(f, t0, dur, type, vol, f2) {
     if (!Sfx.on) return; var c = ensure(); if (!c) return;
@@ -1052,6 +1098,124 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
   Sfx.pop     = function () { tone(400, 0, 0.1, 'sine', 0.2, 900); };
   root.Sfx = Sfx;
 })(window);
+
+</script>
+<script>
+// 문제·보기 읽어 주기: 브라우저 내장 음성(speechSynthesis)으로 읽음. 소리 파일·서버 없음.
+// 문제 → "하나, ○○ / 둘, ○○ …" 순서로 읽고, 읽는 보기는 노란 테두리로 표시함.
+// 영어 단어는 영어 음성(en-US)으로, 나머지는 한국어 음성(ko-KR)으로 읽음. 소리 켜기/끄기 버튼이 음성에도 적용됨.
+(function (root) {
+  'use strict';
+  var syn = root.speechSynthesis, supported = !!(syn && root.SpeechSynthesisUtterance);
+  var gen = 0, voices = [], unlocked = false;
+  var NUM = ['하나', '둘', '셋', '넷'];
+  var JAMO = {
+    'ㄱ': '기역', 'ㄴ': '니은', 'ㄷ': '디귿', 'ㄹ': '리을', 'ㅁ': '미음', 'ㅂ': '비읍', 'ㅅ': '시옷', 'ㅇ': '이응', 'ㅈ': '지읒', 'ㅊ': '치읓',
+    'ㅋ': '키읔', 'ㅌ': '티읕', 'ㅍ': '피읖', 'ㅎ': '히읗', 'ㄲ': '쌍기역', 'ㄸ': '쌍디귿', 'ㅃ': '쌍비읍', 'ㅆ': '쌍시옷', 'ㅉ': '쌍지읒',
+    'ㅏ': '아', 'ㅑ': '야', 'ㅓ': '어', 'ㅕ': '여', 'ㅗ': '오', 'ㅛ': '요', 'ㅜ': '우', 'ㅠ': '유', 'ㅡ': '으', 'ㅣ': '이',
+    'ㅐ': '애', 'ㅔ': '에', 'ㅘ': '와', 'ㅝ': '워', 'ㅢ': '의'
+  };
+
+  function loadVoices() { try { voices = syn.getVoices() || []; } catch (e) { voices = []; } }
+  if (supported) {
+    loadVoices();
+    if (syn.addEventListener) syn.addEventListener('voiceschanged', loadVoices); else syn.onvoiceschanged = loadVoices;
+  }
+  function voiceFor(lang) {
+    var l = lang.toLowerCase(), pre = l.slice(0, 2), best = null;
+    for (var i = 0; i < voices.length; i++) {
+      var vl = (voices[i].lang || '').toLowerCase().replace('_', '-');
+      if (vl === l) return voices[i];
+      if (!best && vl.indexOf(pre) === 0) best = voices[i];
+    }
+    return best;
+  }
+
+  // ---- 글 → 읽을 조각 ----
+  var EMOJI = /[\p{Extended_Pictographic}️‍]/gu;
+  function clean(s) {
+    return String(s == null ? '' : s)
+      .replace(EMOJI, ' ')
+      .replace(/[ㄱ-ㅎㅏ-ㅣ]/g, function (c) { return ' ' + (JAMO[c] || c) + ' '; })
+      .replace(/□/g, ' 빈칸 ')
+      .replace(/['"‘’“”]/g, ' ')
+      .replace(/…/g, ', ')
+      .replace(/\s+/g, ' ').trim();
+  }
+  // 영어(알파벳) 덩어리는 영어 음성으로, 나머지는 한국어 음성으로
+  function segments(text, extra) {
+    var out = [], re = /[A-Za-z]+(?:[ '\-][A-Za-z]+)*/g, last = 0, m, t;
+    function push(str, lang) { str = str.replace(/^[\s,.]+|[\s]+$/g, ''); if (str && /[A-Za-z0-9가-힣]/.test(str)) { var o = { t: str, lang: lang }; if (extra) for (var k in extra) o[k] = extra[k]; out.push(o); } }
+    while ((m = re.exec(text))) { push(text.slice(last, m.index), 'ko-KR'); push(m[0], 'en-US'); last = m.index + m[0].length; }
+    push(text.slice(last), 'ko-KR');
+    return out;
+  }
+  function count(s) { var m = s.match(EMOJI); return m ? m.filter(function (c) { return c !== '️' && c !== '‍'; }).length : 0; }
+  function mathText(big) {
+    if (/[\p{Extended_Pictographic}]/u.test(big)) {           // 그림 덧셈: 개수만 읽음
+      var g = big.split('+'), w = ['영', '하나', '둘', '셋', '넷', '다섯', '여섯'];
+      var a = count(g[0] || ''), b = count(g[1] || '');
+      return (w[a] || a) + ' 더하기 ' + (w[b] || b) + ' 은 얼마일까요';
+    }
+    return clean(big.replace(/\+/g, ' 더하기 ').replace(/[−–-]/g, ' 빼기 ').replace(/=/g, ' 는 ').replace(/\?/g, ' 얼마'));
+  }
+  // 문제 하나 → 읽을 조각 목록 (choice: 몇 번째 보기를 읽는 중인지)
+  function itemsFor(q) {
+    var items = [], i;
+    items = items.concat(segments(clean(q.q)));
+    if (q.big) items = items.concat(segments(q.math ? mathText(q.big) : clean(q.big)));
+    for (i = 0; i < q.choices.length; i++) {
+      items.push({ t: NUM[i] || String(i + 1), lang: 'ko-KR', choice: i, gap: 120 });
+      items = items.concat(segments(clean(q.choices[i]), { choice: i }));
+      if (items.length) items[items.length - 1].gap = 450;
+    }
+    return items;
+  }
+
+  // ---- 재생 ----
+  function mark(i) {
+    var list = document.querySelectorAll('#bChoices .choice');
+    for (var k = 0; k < list.length; k++) list[k].classList.toggle('reading', k === i);
+  }
+  function stop() {
+    gen++; mark(-1);
+    if (supported) { try { syn.cancel(); } catch (e) {} }
+  }
+  function play(items) {
+    stop();
+    if (!supported || !root.Sfx || !root.Sfx.on || !items.length) return;
+    var my = gen;
+    setTimeout(function () { if (my === gen) next(0); }, 120);       // cancel 직후 바로 말하면 크롬이 씹는 경우가 있어 잠깐 쉼
+    function next(i) {
+      if (my !== gen) return;
+      if (i >= items.length) { mark(-1); return; }
+      var it = items[i];
+      if (it.choice != null) mark(it.choice); else mark(-1);
+      var u = new root.SpeechSynthesisUtterance(it.t), done = false, tm;
+      u.lang = it.lang; var v = voiceFor(it.lang); if (v) u.voice = v;
+      u.rate = it.lang === 'ko-KR' ? 0.85 : 0.8; u.pitch = 1.1; u.volume = 1;
+      function go() { if (done) return; done = true; clearTimeout(tm); setTimeout(function () { next(i + 1); }, it.gap || 150); }
+      tm = setTimeout(go, 2000 + it.t.length * 400);                 // onend 가 안 오는 기기 대비
+      u.onend = go; u.onerror = go;
+      try { syn.speak(u); } catch (e) { go(); }
+    }
+  }
+
+  var Voice = {
+    supported: supported,
+    // 첫 터치 안에서 한 번 소리 0으로 말해 둬야 아이패드가 이후 음성을 허용함
+    unlock: function () {
+      if (!supported || unlocked) return;
+      unlocked = true;
+      try { var u = new root.SpeechSynthesisUtterance('.'); u.volume = 0; u.lang = 'ko-KR'; syn.speak(u); } catch (e) {}
+    },
+    read: function (q) { play(itemsFor(q)); },
+    say: function (text) { play(segments(clean(text))); },
+    stop: stop,
+    _items: itemsFor, _clean: clean
+  };
+  root.Voice = Voice;
+})(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
 <script>
@@ -1413,6 +1577,7 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
       box.appendChild(b);
     });
     fit();
+    if (root.Voice) root.Voice.read(q);
   }
 
   // 말풍선이 넘치면 그림(이모지)·문제 글씨를 단계적으로 줄인다 (최소 크기까지)
@@ -1430,12 +1595,12 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     var q = S.cur, btn = $('#bChoices .choice[data-i="' + i + '"]'); if (!btn || btn.disabled) return;
     root.Sfx.unlock();
     if (q.choices[i] === q.a) {
-      S.locked = true; btn.classList.add('ok'); root.Sfx.correct();
+      S.locked = true; btn.classList.add('ok'); root.Sfx.correct(); if (root.Voice) root.Voice.stop();
       $('#bChoices').classList.add('done');
       if (S.phase === 'sil') { reveal().then(startQuestions); }
       else { S.qi++; sleep(900).then(function () { if (S.qi >= S.qs.length) catchIt(); else ask(); }); }
     } else {
-      btn.classList.add('no'); btn.disabled = true; S.wrong[i] = 1; root.Sfx.wrong();
+      btn.classList.add('no'); btn.disabled = true; S.wrong[i] = 1; root.Sfx.wrong(); if (root.Voice) { root.Voice.stop(); setTimeout(function () { if (S && S.phase !== 'end') root.Voice.say('다시 골라 봐요'); }, 500); }
       S.hearts--; renderHearts(S.hearts);
       $('#bBubble').classList.remove('shake'); void $('#bBubble').offsetWidth; $('#bBubble').classList.add('shake');
       if (S.hearts <= 0) { S.locked = true; flee(); }
@@ -1449,7 +1614,7 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     img.classList.remove('sil'); img.classList.add('revealed');
     $('#bName').textContent = p.name; $('#bName').classList.add('show');
     $('#bTypes').innerHTML = root.typeChips(p.types); $('#bTypes').classList.add('show');
-    setChip('정체는 ' + p.name + '!');
+    setChip('정체는 ' + p.name + '!'); if (root.Voice) root.Voice.say(p.name);
     return sleep(1700);
   }
 
@@ -1469,7 +1634,7 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     $('#ovMsg').textContent = msg; $('#ovSub').innerHTML = sub; $('#ovBtn').textContent = btn;
     $('#bOverlay').classList.remove('hidden'); setTimeout(function () { $('#ovBtn').focus(); }, 50);
   }
-  function finish(result) { if (!S) return; S.phase = 'end'; var cb = onEnd; $('#bOverlay').classList.add('hidden'); S = null; if (cb) cb(result); }
+  function finish(result) { if (root.Voice) root.Voice.stop(); if (!S) return; S.phase = 'end'; var cb = onEnd; $('#bOverlay').classList.add('hidden'); S = null; if (cb) cb(result); }
 
   function flee() {
     S.phase = 'end'; var img = $('#bImg'); img.classList.remove('sil'); img.classList.add('revealed');
@@ -1528,7 +1693,7 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
   var Battle = {
     // poke: 포켓몬, gold: 금색 볼 여부, cb(result: 'caught'|'fled')
     start: function (poke, gold, regionKey, cb) {
-      onEnd = cb; var reg = root.Regions.byKey[regionKey] || root.Regions.list[0];
+      if (root.Voice) root.Voice.stop(); onEnd = cb; var reg = root.Regions.byKey[regionKey] || root.Regions.list[0];
       S = { poke: poke, gold: !!gold, region: regionKey, hearts: 3, phase: 'loading', qs: Questions.pick(gold ? 4 : 2), qi: 0, locked: true, wrong: {}, over: null };
       var el = $('#battle'); el.className = 'screen active region-' + reg.key + (gold ? ' gold' : '');
       $('#bOverlay').classList.add('hidden'); $('#bFx').classList.add('hidden'); $('#bFx').querySelectorAll('.spark').forEach(function (n) { n.remove(); });
@@ -1555,7 +1720,8 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
       if (e.key >= '1' && e.key <= '4') { choose(+e.key - 1); return true; }
       return false;
     },
-    init: function () { $('#ovBtn').addEventListener('click', function () { if (S) { root.Sfx.click(); finish(S.over || 'fled'); } }); }
+    init: function () { $('#bSpeak').addEventListener('click', function () { root.Sfx.unlock(); if (S && S.cur && S.phase !== 'end') root.Voice.read(S.cur); });
+      $('#ovBtn').addEventListener('click', function () { if (S) { root.Sfx.click(); finish(S.over || 'fled'); } }); }
   };
   root.Battle = Battle;
 })(window);
@@ -1568,17 +1734,19 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
   var filter = 'all';
   function pad3(n) { return n < 10 ? '00' + n : n < 100 ? '0' + n : '' + n; }
   function render() {
-    var P = root.POKEMON, S = root.Store, grid = document.getElementById('dexGrid'), n = 0, html = [];
-    grid.innerHTML = '';
+    var P = root.POKEMON, S = root.Store, grid = document.getElementById('dexGrid'), n = 0, art = filter === 'art';
+    grid.innerHTML = ''; grid.classList.toggle('art', art);
     P.forEach(function (p) {
       var got = S.isCaught(p.id); if (got) n++;
       if (filter === 'caught' && !got) return;
-      var c = document.createElement('div'); c.className = 'dcell' + (got ? ' got' : '') + (p.rank !== 'normal' ? ' rare' : '');
-      var img = document.createElement('img'); img.loading = 'lazy'; img.alt = got ? p.name : '';
-      if (!got) img.className = 'sil'; root.PokeImg.attach(img, p.id);
+      var show = got || art;   // 그림 모두 보기: 못 잡은 포켓몬도 색칠된 그림·이름으로 보여 줌
+      var c = document.createElement('div'); c.className = 'dcell' + (show ? ' got' : '') + (art && got ? ' mine' : '') + (p.rank !== 'normal' ? ' rare' : '');
+      var img = document.createElement('img'); img.loading = 'lazy'; img.alt = show ? p.name : '';
+      if (!show) img.className = 'sil'; root.PokeImg.attach(img, p.id);
       var num = document.createElement('div'); num.className = 'dnum'; num.textContent = '#' + pad3(p.id) + (p.rank !== 'normal' ? ' ★' : '');
-      var nm = document.createElement('div'); nm.className = 'dname'; nm.textContent = got ? p.name : '???';
-      var ty = document.createElement('div'); ty.className = 'dtypes'; ty.innerHTML = got ? root.typeChips(p.types) : '';
+      var nm = document.createElement('div'); nm.className = 'dname'; nm.textContent = show ? p.name : '???';
+      var ty = document.createElement('div'); ty.className = 'dtypes'; ty.innerHTML = show ? root.typeChips(p.types) : '';
+      if (show) { c.classList.add('tap'); c.addEventListener('click', function () { root.Sfx.unlock(); if (root.Voice) root.Voice.say(p.name); }); }   // 눌러서 이름 듣기
       c.appendChild(num); c.appendChild(img); c.appendChild(nm); c.appendChild(ty); grid.appendChild(c);
     });
     if (!grid.children.length) { grid.innerHTML = '<div class="dempty">아직 잡은 포켓몬이 없어요.<br>필드에서 몬스터볼을 찾아봐요!</div>'; }
@@ -1586,10 +1754,11 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     document.querySelectorAll('#dex [data-filter]').forEach(function (b) { b.classList.toggle('on', b.dataset.filter === filter); });
   }
   root.Dex = {
-    show: function () { render(); document.getElementById('dexGrid').scrollTop = 0; },
+    show: function () { if (root.Voice) root.Voice.stop(); render(); document.getElementById('dexGrid').scrollTop = 0; },
     setFilter: function (f) { filter = f; render(); },
     init: function () {
       document.querySelectorAll('#dex [data-filter]').forEach(function (b) { b.addEventListener('click', function () { root.Sfx.click(); root.Dex.setFilter(b.dataset.filter); }); });
+      var back = document.getElementById('dexBack'); if (back) back.addEventListener('click', function () { if (root.Voice) root.Voice.stop(); });
     }
   };
 })(window);
@@ -1715,7 +1884,8 @@ window.POKEMON = [{"id":1,"name":"이상해씨","types":["grass","poison"],"rank
     $('#scNext').addEventListener('click', function () { stampPage++; renderStamps(); root.Sfx.click(); });
     $('#stampOk').addEventListener('click', function () { root.Sfx.click(); $('#stampPop').classList.add('hidden'); });
     // 소리는 첫 터치·키 입력 뒤에만 켜진다 (브라우저 규칙)
-    ['pointerdown', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function () { root.Sfx.unlock(); }, { once: true, capture: true }); });
+    ['touchstart', 'touchend', 'pointerup', 'mousedown', 'click', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function () { root.Sfx.unlock(); }, { capture: true, passive: true }); });
+    document.addEventListener('visibilitychange', function () { if (document.hidden) { if (root.Voice) root.Voice.stop(); } });
     window.addEventListener('keydown', function (e) {
       if (e.target && e.target.tagName === 'TEXTAREA') { if (e.key === 'Escape') $('#syncClose').click(); return; }
       if (current === 'battle') { if (root.Battle.key(e)) e.preventDefault(); return; }
